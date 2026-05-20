@@ -13,7 +13,7 @@ from bot.trade_logger import (
     format_stats_message, get_signals_last_24h,
 )
 
-SYMBOLS = ["ES", "NQ", "CL", "GC"]
+SYMBOLS = ["ES", "NQ", "CL", "GC", "SI", "NG", "YM", "HG", "ZN", "6E", "6J", "6B"]
 
 _DATA_DIR          = Path(__file__).parent.parent / "data"
 _LAST_SUMMARY_FILE = _DATA_DIR / ".last_daily_summary"

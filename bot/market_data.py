@@ -7,6 +7,14 @@ SYMBOL_MAP = {
     "NQ": "NQ=F",
     "CL": "CL=F",
     "GC": "GC=F",
+    "SI": "SI=F",
+    "NG": "NG=F",
+    "YM": "YM=F",
+    "HG": "HG=F",
+    "ZN": "ZN=F",
+    "6E": "6E=F",
+    "6J": "6J=F",
+    "6B": "6B=F",
 }
 
 INTERVAL_PERIOD_MAP = {
