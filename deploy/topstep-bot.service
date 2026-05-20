@@ -1,0 +1,17 @@
+[Unit]
+Description=TopStep Signal Scanner Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/eva/workspace/top_step_agent
+ExecStart=/usr/bin/python3 /home/eva/workspace/top_step_agent/main.py 15
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=topstep-bot
+
+[Install]
+WantedBy=default.target

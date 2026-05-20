@@ -1,0 +1,17 @@
+# Environment — never commit credentials
+.env
+
+# Runtime data
+data/
+*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Logs
+*.log
+.scan_count
