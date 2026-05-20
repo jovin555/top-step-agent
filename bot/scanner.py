@@ -1,32 +1,75 @@
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from dotenv import load_dotenv
 
 from clients.deepseek import DeepseekClient
 from clients.telegram import TelegramClient
 from bot.strategy import build_signal_prompt, parse_signal, format_signal_message
 from bot.market_data import get_market_snapshot
-from bot.trade_logger import log_signal, resolve_open_trades, get_stats, format_stats_message
+from bot.trade_logger import (
+    log_signal, resolve_open_trades, get_stats,
+    format_stats_message, get_signals_last_24h,
+)
 
 SYMBOLS = ["ES", "NQ", "CL", "GC"]
-STATS_EVERY_N_SCANS = 10
 
-_COUNTER_FILE = __file__.replace("scanner.py", "") + "../../data/.scan_count"
+_DATA_DIR          = Path(__file__).parent.parent / "data"
+_LAST_SUMMARY_FILE = _DATA_DIR / ".last_daily_summary"
 
 
-def _read_scan_count() -> int:
+def _get_last_summary_time():
     try:
-        return int(open(_COUNTER_FILE).read().strip())
+        return datetime.fromisoformat(_LAST_SUMMARY_FILE.read_text().strip())
     except Exception:
-        return 0
+        return None
 
 
-def _write_scan_count(n: int):
+def _set_last_summary_time(dt: datetime):
     try:
-        open(_COUNTER_FILE, "w").write(str(n))
+        _DATA_DIR.mkdir(exist_ok=True)
+        _LAST_SUMMARY_FILE.write_text(dt.isoformat())
     except Exception:
         pass
+
+
+def _should_send_daily_summary() -> bool:
+    last = _get_last_summary_time()
+    if last is None:
+        return True
+    return (datetime.now(timezone.utc) - last).total_seconds() >= 86400
+
+
+def _format_daily_summary(signals_24h: list, stats: dict) -> str:
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    lines = [f"📅 *TopStep Daily Summary* — `{timestamp}`\n"]
+
+    if signals_24h:
+        lines.append("*Signals in the last 24h:*")
+        for t in signals_24h:
+            icon = {"WIN": "✅", "LOSS": "❌", "OPEN": "🔓", "EXPIRED": "⏳"}.get(t["outcome"], "❓")
+            emoji = "🟢" if t["direction"] == "LONG" else "🔴"
+            pnl_str = (
+                f" | {'+' if (t['pnl_points'] or 0) >= 0 else ''}{t['pnl_points']} pts"
+                if t["pnl_points"] is not None else ""
+            )
+            lines.append(
+                f"  {icon}{emoji} *{t['symbol']}* {t['direction']} @ `{t['entry']}` "
+                f"({t['win_probability']}%){pnl_str}"
+            )
+    else:
+        lines.append("_No signals generated in the last 24 hours._")
+
+    lines.append("")
+    lines.append("*Overall Stats:*")
+    win_emoji = "🟢" if stats["win_rate"] >= 60 else "🟡" if stats["win_rate"] >= 50 else "🔴"
+    pnl_emoji = "📈" if stats["total_pnl_pts"] >= 0 else "📉"
+    lines.append(f"  {win_emoji} Win Rate : `{stats['win_rate']}%` ({stats['wins']}W / {stats['losses']}L)")
+    lines.append(f"  {pnl_emoji} Total P&L: `{stats['total_pnl_pts']} pts`")
+    lines.append(f"  📋 Total Signals: `{stats['total_signals']}`")
+
+    return "\n".join(lines)
 
 
 def run():
@@ -102,28 +145,9 @@ def run():
         )
         print(f"  Resolved: {t['symbol']} {t['direction']} → {t['outcome']}{pnl}")
 
-    # ── Scan summary ─────────────────────────────────────────────────────
-    summary = [f"🔍 *TopStep Market Scan* — `{timestamp}`\n"]
-
+    # ── Send signal card only when a signal exists ────────────────────────
     if results:
         sorted_results = sorted(results, key=lambda x: x[2].get("win_probability", 0), reverse=True)
-        for sym, snap, sig in sorted_results:
-            emoji = "🟢" if sig["direction"] == "LONG" else "🔴"
-            summary.append(f"{emoji} *{sym}*: {sig['direction']} | {sig.get('win_probability','?')}% | {sig.get('confidence','?')}")
-
-    for sym in no_trades:
-        summary.append(f"⚪ *{sym}*: NO_TRADE")
-
-    if results:
-        best_symbol, best_snapshot, best_signal = sorted_results[0]
-        summary.append(f"\n🏆 *Best setup: {best_symbol}* ({best_signal.get('win_probability','?')}% win probability)")
-    else:
-        summary.append("\n_No actionable setups found — waiting for better conditions._")
-
-    telegram.send_message("\n".join(summary))
-
-    # ── Best signal card + log ────────────────────────────────────────────
-    if results:
         best_symbol, best_snapshot, best_signal = sorted_results[0]
         telegram.send_message(
             format_signal_message(best_symbol, timeframe, best_signal, best_snapshot["current_price"])
@@ -132,13 +156,13 @@ def run():
         print(f"\nSignal sent & logged: {best_symbol} {best_signal['direction']} "
               f"({best_signal.get('win_probability')}%) — ID: {trade_id}")
     else:
-        print("\nNo actionable signals found.")
+        print("\nNo actionable signals found — no Telegram message sent.")
 
-    # ── Periodic stats ────────────────────────────────────────────────────
-    scan_count = _read_scan_count() + 1
-    _write_scan_count(scan_count)
-    if scan_count % STATS_EVERY_N_SCANS == 0:
-        stats = get_stats()
-        if stats["total_signals"] > 0:
-            telegram.send_message(format_stats_message(stats))
-            print(f"Stats report sent (scan #{scan_count}).")
+    # ── 24-hour daily summary ─────────────────────────────────────────────
+    if _should_send_daily_summary():
+        signals_24h = get_signals_last_24h()
+        stats       = get_stats()
+        if stats["total_signals"] > 0 or signals_24h:
+            telegram.send_message(_format_daily_summary(signals_24h, stats))
+        _set_last_summary_time(datetime.now(timezone.utc))
+        print("Daily summary sent.")

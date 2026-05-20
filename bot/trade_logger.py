@@ -140,6 +140,15 @@ def get_stats() -> dict:
     }
 
 
+def get_signals_last_24h() -> list:
+    """Return trades opened in the last 24 hours, newest first."""
+    trades = _load()
+    from datetime import timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    recent = [t for t in trades if datetime.fromisoformat(t["opened_at"]) >= cutoff]
+    return sorted(recent, key=lambda x: x["opened_at"], reverse=True)
+
+
 def format_stats_message(stats: dict) -> str:
     win_emoji = "🟢" if stats["win_rate"] >= 60 else "🟡" if stats["win_rate"] >= 50 else "🔴"
     pnl_emoji = "📈" if stats["total_pnl_pts"] >= 0 else "📉"
