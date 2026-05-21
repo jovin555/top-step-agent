@@ -3,18 +3,18 @@ import pandas as pd
 import numpy as np
 
 SYMBOL_MAP = {
-    "ES": "ES=F",
-    "NQ": "NQ=F",
-    "CL": "CL=F",
-    "GC": "GC=F",
-    "SI": "SI=F",
-    "NG": "NG=F",
-    "YM": "YM=F",
-    "HG": "HG=F",
-    "ZN": "ZN=F",
-    "6E": "6E=F",
-    "6J": "6J=F",
-    "6B": "6B=F",
+    "BTC":   "BTC-USD",
+    "ETH":   "ETH-USD",
+    "SOL":   "SOL-USD",
+    "BNB":   "BNB-USD",
+    "XRP":   "XRP-USD",
+    "ADA":   "ADA-USD",
+    "AVAX":  "AVAX-USD",
+    "DOGE":  "DOGE-USD",
+    "DOT":   "DOT-USD",
+    "LINK":  "LINK-USD",
+    "LTC":   "LTC-USD",
+    "ATOM":  "ATOM-USD",
 }
 
 INTERVAL_PERIOD_MAP = {
@@ -56,6 +56,26 @@ def _atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) ->
         (low - close.shift()).abs(),
     ], axis=1).max(axis=1)
     return tr.ewm(com=period - 1, adjust=True).mean()
+
+
+def get_1h_bias(symbol: str) -> dict:
+    """Fetch 1H EMA200 to establish macro trend bias for the signal filter."""
+    ticker = SYMBOL_MAP.get(symbol.upper(), symbol)
+    try:
+        df = yf.download(ticker, interval="60m", period="30d", progress=False, auto_adjust=True)
+        if df.empty or len(df) < 50:
+            return {"ema_200_1h": None, "bias_1h": "UNKNOWN"}
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        close = df["Close"].squeeze().dropna()
+        ema200_1h = float(_ema(close, min(200, len(close))).iloc[-1])
+        current = float(close.iloc[-1])
+        return {
+            "ema_200_1h": round(ema200_1h, 2),
+            "bias_1h": "BULLISH" if current > ema200_1h else "BEARISH",
+        }
+    except Exception:
+        return {"ema_200_1h": None, "bias_1h": "UNKNOWN"}
 
 
 def get_market_snapshot(symbol: str, timeframe: str = "15m") -> dict:

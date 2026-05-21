@@ -1,13 +1,13 @@
-# TopStep Signal & Telegram Bot
+# Crypto Signal & Telegram Bot
 
-This project is a starter scaffold for generating trade signals and sending them to Telegram. It is NOT a fully automated Topstep trade execution system.
+This project is a starter scaffold for generating crypto trade signals and sending them to Telegram. It is NOT a fully automated crypto trade execution system.
 
 ## What this repo contains
-- `bot.py` — main runner that builds a signal prompt, sends it to an LLM, and posts the result to Telegram
-- `deepseek_client.py` — LLM client wrapper for `deepseek` (with fallback support)
-- `telegram_client.py` — Telegram message sender
-- `strategy.py` — simple signal prompt builder and parser
-- `market_data.py` — placeholder for real market data integration
+- `main.py` — signal scanner entry point and scheduler
+- `bot/` — signal prompt builder, parser, and logger
+- `clients/` — Telegram and LLM client wrappers
+- `bot/market_data.py` — placeholder for real market data integration
+- `stats.py` — helper for signal statistics
 
 ## Setup
 1. Copy `.env.example` to `.env`
@@ -23,5 +23,5 @@ This project is a starter scaffold for generating trade signals and sending them
 
 ## Important notes
 - This repo sends Telegram alerts only.
-- Topstep funded accounts generally require manual or broker-approved execution.
+- Crypto trade signals generally require manual execution or exchange-approved automation.
 - Keep `.env` private and rotate any leaked API keys.

@@ -7,13 +7,13 @@ from dotenv import load_dotenv
 from clients.deepseek import DeepseekClient
 from clients.telegram import TelegramClient
 from bot.strategy import build_signal_prompt, parse_signal, format_signal_message
-from bot.market_data import get_market_snapshot
+from bot.market_data import get_market_snapshot, get_1h_bias
 from bot.trade_logger import (
     log_signal, resolve_open_trades, get_stats,
     format_stats_message, get_signals_last_24h,
 )
 
-SYMBOLS = ["ES", "NQ", "CL", "GC", "SI", "NG", "YM", "HG", "ZN", "6E", "6J", "6B"]
+SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "DOGE", "DOT", "LINK", "LTC", "ATOM"]
 
 _DATA_DIR          = Path(__file__).parent.parent / "data"
 _LAST_SUMMARY_FILE = _DATA_DIR / ".last_daily_summary"
@@ -43,7 +43,7 @@ def _should_send_daily_summary() -> bool:
 
 def _format_daily_summary(signals_24h: list, stats: dict) -> str:
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    lines = [f"📅 *TopStep Daily Summary* — `{timestamp}`\n"]
+    lines = [f"📅 *Crypto Daily Summary* — `{timestamp}`\n"]
 
     if signals_24h:
         lines.append("*Signals in the last 24h:*")
@@ -51,11 +51,11 @@ def _format_daily_summary(signals_24h: list, stats: dict) -> str:
             icon = {"WIN": "✅", "LOSS": "❌", "OPEN": "🔓", "EXPIRED": "⏳"}.get(t["outcome"], "❓")
             emoji = "🟢" if t["direction"] == "LONG" else "🔴"
             pnl_str = (
-                f" | {'+' if (t['pnl_points'] or 0) >= 0 else ''}{t['pnl_points']} pts"
+                f" | {'+' if (t['pnl_points'] or 0) >= 0 else ''}${t['pnl_points']:.2f}"
                 if t["pnl_points"] is not None else ""
             )
             lines.append(
-                f"  {icon}{emoji} *{t['symbol']}* {t['direction']} @ `{t['entry']}` "
+                f"  {icon}{emoji} *{t['symbol']}/USDT* {t['direction']} @ `${t['entry']}` "
                 f"({t['win_probability']}%){pnl_str}"
             )
     else:
@@ -65,8 +65,9 @@ def _format_daily_summary(signals_24h: list, stats: dict) -> str:
     lines.append("*Overall Stats:*")
     win_emoji = "🟢" if stats["win_rate"] >= 60 else "🟡" if stats["win_rate"] >= 50 else "🔴"
     pnl_emoji = "📈" if stats["total_pnl_pts"] >= 0 else "📉"
+    pnl_sign  = "+" if stats["total_pnl_pts"] >= 0 else ""
     lines.append(f"  {win_emoji} Win Rate : `{stats['win_rate']}%` ({stats['wins']}W / {stats['losses']}L)")
-    lines.append(f"  {pnl_emoji} Total P&L: `{stats['total_pnl_pts']} pts`")
+    lines.append(f"  {pnl_emoji} Total P&L: `{pnl_sign}${stats['total_pnl_pts']:,.2f}`")
     lines.append(f"  📋 Total Signals: `{stats['total_signals']}`")
 
     return "\n".join(lines)
@@ -98,7 +99,13 @@ def run():
     )
     telegram  = TelegramClient(telegram_token, telegram_chat_id)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    print(f"\n=== TopStep Signal Scanner | {timestamp} ===")
+    print(f"\n=== Crypto Signal Scanner | {timestamp} ===")
+
+    # Check daily signal cap before scanning
+    daily_signals_sent = len(get_signals_last_24h())
+    daily_cap_reached  = daily_signals_sent >= 3
+    if daily_cap_reached:
+        print(f"Daily signal limit reached ({daily_signals_sent}/3). Scanning for trade resolution only.")
 
     snapshots = {}
     results   = []
@@ -109,9 +116,15 @@ def run():
             print(f"Analyzing {symbol}...")
             snapshot          = get_market_snapshot(symbol, timeframe)
             snapshots[symbol] = snapshot["current_price"]
-            prompt            = build_signal_prompt(symbol, timeframe, snapshot)
-            response          = client.chat(prompt)
-            signal            = parse_signal(response)
+
+            if daily_cap_reached:
+                no_trades.append(symbol)
+                continue
+
+            bias_1h = get_1h_bias(symbol)
+            prompt  = build_signal_prompt(symbol, timeframe, snapshot, bias_1h)
+            response = client.chat(prompt)
+            signal   = parse_signal(response)
 
             if signal is None:
                 print(f"  {symbol}: could not parse LLM response")
@@ -122,8 +135,15 @@ def run():
                 print(f"  {symbol}: NO_TRADE")
                 no_trades.append(symbol)
             else:
+                # Compute partial TP at 1:1 R/R for tiered exit
+                risk = abs(signal["entry"] - signal["stop_loss"])
+                if signal["direction"] == "LONG":
+                    signal["take_profit_partial"] = round(signal["entry"] + risk, 4)
+                else:
+                    signal["take_profit_partial"] = round(signal["entry"] - risk, 4)
+
                 prob = signal.get("win_probability", 0)
-                print(f"  {symbol}: {signal['direction']} | prob={prob}% | conf={signal.get('confidence')}")
+                print(f"  {symbol}: {signal['direction']} | prob={prob}% | conf={signal.get('confidence')} | 1H={bias_1h.get('bias_1h')}")
                 results.append((symbol, snapshot, signal))
 
         except Exception as e:
@@ -133,15 +153,15 @@ def run():
     # ── Resolve open trades ───────────────────────────────────────────────
     resolved = resolve_open_trades(snapshots)
     for t in resolved:
-        icon = "✅ WIN" if t["outcome"] == "WIN" else "❌ LOSS" if t["outcome"] == "LOSS" else "⏳ EXPIRED"
+        icon = "✅ WIN" if t["outcome"] == "WIN" else "🔶 PARTIAL WIN" if t["outcome"] == "PARTIAL_WIN" else "❌ LOSS" if t["outcome"] == "LOSS" else "⏳ EXPIRED"
         pnl  = (
-            f" ({'+' if (t['pnl_points'] or 0) >= 0 else ''}{t['pnl_points']} pts)"
+            f" ({'+' if (t['pnl_points'] or 0) >= 0 else ''}${t['pnl_points']:.2f})"
             if t["pnl_points"] is not None else ""
         )
         telegram.send_message(
-            f"{icon} — *{t['symbol']} {t['direction']}*{pnl}\n"
-            f"Entry: `{t['entry']}` → Close: `{t['close_price']}`\n"
-            f"TP: `{t['take_profit']}` | SL: `{t['stop_loss']}`"
+            f"{icon} — *{t['symbol']}/USDT {t['direction']}*{pnl}\n"
+            f"Entry: `${t['entry']}` → Close: `${t['close_price']}`\n"
+            f"TP: `${t['take_profit']}` | SL: `${t['stop_loss']}`"
         )
         print(f"  Resolved: {t['symbol']} {t['direction']} → {t['outcome']}{pnl}")
 
