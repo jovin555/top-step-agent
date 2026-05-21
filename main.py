@@ -1,5 +1,5 @@
 """
-TopStep Signal Bot — entry point.
+Crypto Signal Bot — entry point.
 Runs the signal scanner on a fixed interval.
 
 Usage:
@@ -23,7 +23,7 @@ def tick():
 
 
 if __name__ == "__main__":
-    print(f"TopStep Signal Bot started — scanning every {INTERVAL_MINUTES} minutes.")
+    print(f"Crypto Signal Bot started — scanning every {INTERVAL_MINUTES} minutes.")
     print("Press Ctrl+C to stop.\n")
     tick()
     while True:

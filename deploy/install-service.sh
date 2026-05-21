@@ -1,37 +1,37 @@
 #!/bin/bash
-# Install topstep-bot as a system-wide service (requires sudo).
+# Install crypto-signals-bot as a system-wide service (requires sudo).
 # Usage: sudo bash deploy/install-service.sh
 
 set -e
 
-cat > /etc/systemd/system/topstep-bot.service << 'EOF'
+cat > /etc/systemd/system/crypto-signals-bot.service << 'EOF'
 [Unit]
-Description=TopStep Signal Scanner Bot
+Description=Crypto Signal Scanner Bot
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=eva
-WorkingDirectory=/home/eva/workspace/top_step_agent
-ExecStart=/usr/bin/python3 /home/eva/workspace/top_step_agent/main.py 15
+WorkingDirectory=/home/eva/workspace/crypto_agent
+ExecStart=/usr/bin/python3 /home/eva/workspace/crypto_agent/main.py 15
 Restart=always
 RestartSec=30
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=topstep-bot
+SyslogIdentifier=crypto-signals-bot
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable topstep-bot
-systemctl restart topstep-bot
-systemctl status topstep-bot --no-pager
+systemctl enable crypto-signals-bot
+systemctl restart crypto-signals-bot
+systemctl status crypto-signals-bot --no-pager
 
 echo ""
 echo "Done. Commands:"
-echo "  systemctl status topstep-bot"
-echo "  systemctl restart topstep-bot"
-echo "  journalctl -u topstep-bot -f"
+echo "  systemctl status crypto-signals-bot"
+echo "  systemctl restart crypto-signals-bot"
+echo "  journalctl -u crypto-signals-bot -f"

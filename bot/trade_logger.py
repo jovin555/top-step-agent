@@ -5,9 +5,9 @@ take_profit, partial_exit_tp, or stop_loss since the signal was issued.
 Partial-exit flow:
   1. When price reaches partial_exit_tp, half the position exits and
      trailing_sl is moved to entry (breakeven).
-  2. If price then hits the (now breakeven) trailing_sl → BREAKEVEN, pnl=0.
-  3. If price reaches take_profit → WIN.
-  4. If price hits stop_loss before partial exit → LOSS.
+  2. If price then hits the (now breakeven) trailing_sl -> BREAKEVEN, pnl=0.
+  3. If price reaches take_profit -> WIN.
+  4. If price hits stop_loss before partial exit -> LOSS.
 
 Trades are stored in data/trades.json. Stats are computed on demand.
 """
@@ -86,12 +86,12 @@ def resolve_open_trades(snapshots: dict) -> list:
 
         opened_at = datetime.fromisoformat(t["opened_at"])
         age_hours = (now - opened_at).total_seconds() / 3600
-        direction = t["direction"]
-        tp        = t["take_profit"]
-        sl        = t["stop_loss"]
+        direction  = t["direction"]
+        tp         = t["take_profit"]
+        sl         = t["stop_loss"]
         partial_tp = t.get("partial_exit_tp")
 
-        # ── Partial-exit check: move trailing_sl to breakeven ─────────────
+        # Partial-exit check: move trailing_sl to breakeven
         if partial_tp and not t.get("partial_exited"):
             hit_partial = (
                 (direction == "LONG"  and price >= partial_tp) or
@@ -141,12 +141,12 @@ def resolve_open_trades(snapshots: dict) -> list:
 
 
 def get_stats() -> dict:
-    trades    = _load()
-    closed    = [t for t in trades if t["outcome"] in ("WIN", "LOSS", "BREAKEVEN")]
-    open_     = [t for t in trades if t["outcome"] == "OPEN"]
-    expired   = [t for t in trades if t["outcome"] == "EXPIRED"]
-    wins      = [t for t in closed if t["outcome"] == "WIN"]
-    losses    = [t for t in closed if t["outcome"] == "LOSS"]
+    trades     = _load()
+    closed     = [t for t in trades if t["outcome"] in ("WIN", "LOSS", "BREAKEVEN")]
+    open_      = [t for t in trades if t["outcome"] == "OPEN"]
+    expired    = [t for t in trades if t["outcome"] == "EXPIRED"]
+    wins       = [t for t in closed if t["outcome"] == "WIN"]
+    losses     = [t for t in closed if t["outcome"] == "LOSS"]
     breakevens = [t for t in closed if t["outcome"] == "BREAKEVEN"]
 
     total_pnl = sum(t["pnl_points"] for t in closed if t["pnl_points"] is not None)
@@ -214,7 +214,7 @@ def format_stats_message(stats: dict) -> str:
             pnl_sign = "+" if s["pnl"] >= 0 else ""
             be_str   = f" / {s['breakevens']}BE" if s.get("breakevens") else ""
             lines.append(
-                f"  • *{sym}*: {s['wins']}W / {s['losses']}L{be_str} ({wr}%) | "
+                f"  * *{sym}*: {s['wins']}W / {s['losses']}L{be_str} ({wr}%) | "
                 f"PnL: `{pnl_sign}{round(s['pnl'],1)} pts`"
             )
 

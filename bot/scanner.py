@@ -15,7 +15,7 @@ from bot.trade_logger import (
 
 SYMBOLS = ["ES", "NQ", "CL", "GC", "SI", "NG", "YM", "HG", "ZN", "6E", "6J", "6B"]
 
-# Dollar value of a 1-unit price move per contract for each instrument.
+# Dollar value of a 1-unit price move per contract.
 # Used to compute ATR-based position sizing (1% account risk rule).
 TICK_VALUES = {
     "ES":  50.0,        # $50 per index point
@@ -31,6 +31,8 @@ TICK_VALUES = {
     "6J":  12500000.0,  # $12.5M per $1 (12.5M JPY)
     "6B":  62500.0,     # $62500 per $1 (62500 GBP)
 }
+
+DAILY_SIGNAL_CAP = 3   # max new signals per 24h session
 
 _DATA_DIR          = Path(__file__).parent.parent / "data"
 _LAST_SUMMARY_FILE = _DATA_DIR / ".last_daily_summary"
@@ -93,7 +95,7 @@ def _format_daily_summary(signals_24h: list, stats: dict) -> str:
 def get_position_size(symbol: str, atr: float, account_equity: float, risk_pct: float = 0.01) -> int:
     """
     ATR-based position sizing capped at 1% account risk.
-    Stop is set at 2× ATR; we find how many contracts keep dollar risk ≤ account_equity × risk_pct.
+    Stop is set at 2x ATR; returns how many contracts keep dollar risk <= account_equity * risk_pct.
     Returns at least 1 (minimum tradeable size).
     """
     tick_value    = TICK_VALUES.get(symbol.upper(), 100.0)
@@ -108,9 +110,9 @@ def check_signal_confirmation(snapshot: dict, signal: dict) -> tuple[bool, int, 
     2-of-3 confirmation gate before a signal is accepted.
 
     Criteria:
-      1. RSI alignment  — RSI > 45 for LONG, < 55 for SHORT
-      2. EMA20 alignment — price above EMA20 for LONG, below for SHORT
-      3. Volume surge   — current volume > 130% of 20-bar average
+      1. RSI alignment  - RSI > 45 for LONG, < 55 for SHORT
+      2. EMA20 alignment - price above EMA20 for LONG, below for SHORT
+      3. Volume surge   - current volume > 130% of 20-bar average
 
     Returns (confirmed, score, reasons).
     """
@@ -173,6 +175,13 @@ def run():
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     print(f"\n=== TopStep Signal Scanner | {timestamp} ===")
 
+    # Check daily signal cap before scanning
+    daily_signals_sent = len(get_signals_last_24h())
+    daily_cap_reached  = daily_signals_sent >= DAILY_SIGNAL_CAP
+    if daily_cap_reached:
+        print(f"Daily signal limit reached ({daily_signals_sent}/{DAILY_SIGNAL_CAP}). "
+              f"Scanning for trade resolution only.")
+
     snapshots = {}
     results   = []
     no_trades = []
@@ -182,6 +191,10 @@ def run():
             print(f"Analyzing {symbol}...")
             snapshot          = get_market_snapshot(symbol, timeframe)
             snapshots[symbol] = snapshot["current_price"]
+
+            if daily_cap_reached:
+                no_trades.append(symbol)
+                continue
 
             # ── 1H higher-timeframe trend filter ──────────────────────────
             htf_trend = "UNKNOWN"
@@ -253,13 +266,13 @@ def run():
         )
         telegram.send_message(
             f"{icon} — *{t['symbol']} {t['direction']}*{pnl}\n"
-            f"Entry: `{t['entry']}` → Close: `{t['close_price']}`\n"
+            f"Entry: `{t['entry']}` -> Close: `{t['close_price']}`\n"
             f"TP: `{t['take_profit']}` | SL: `{t['stop_loss']}`"
         )
-        print(f"  Resolved: {t['symbol']} {t['direction']} → {t['outcome']}{pnl}")
+        print(f"  Resolved: {t['symbol']} {t['direction']} -> {t['outcome']}{pnl}")
 
     # ── Send signal card only when a signal exists ────────────────────────
-    if results:
+    if results and not daily_cap_reached:
         sorted_results = sorted(results, key=lambda x: x[2].get("win_probability", 0), reverse=True)
         best_symbol, best_snapshot, best_signal = sorted_results[0]
         telegram.send_message(
@@ -269,7 +282,7 @@ def run():
         print(f"\nSignal sent & logged: {best_symbol} {best_signal['direction']} "
               f"({best_signal.get('win_probability')}%) — ID: {trade_id}")
     else:
-        print("\nNo actionable signals this scan (all filtered or NO_TRADE).")
+        print("\nNo actionable signals this scan (all filtered, NO_TRADE, or daily cap reached).")
 
     # ── 24-hour daily summary ─────────────────────────────────────────────
     if _should_send_daily_summary():

@@ -83,13 +83,13 @@ def get_market_snapshot(symbol: str, timeframe: str = "15m") -> dict:
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
-    close = df["Close"].squeeze().dropna()
-    high  = df["High"].squeeze().dropna()
-    low   = df["Low"].squeeze().dropna()
-    open_ = df["Open"].squeeze().dropna()
+    close  = df["Close"].squeeze().dropna()
+    high   = df["High"].squeeze().dropna()
+    low    = df["Low"].squeeze().dropna()
+    open_  = df["Open"].squeeze().dropna()
     volume = df["Volume"].squeeze().dropna()
 
-    rsi = _rsi(close)
+    rsi    = _rsi(close)
     ema20  = _ema(close, 20)
     ema50  = _ema(close, 50)
     ema200 = _ema(close, 200)
@@ -97,8 +97,8 @@ def get_market_snapshot(symbol: str, timeframe: str = "15m") -> dict:
     atr = _atr(high, low, close)
 
     # Bollinger Bands
-    sma20 = close.rolling(20).mean()
-    std20 = close.rolling(20).std()
+    sma20    = close.rolling(20).mean()
+    std20    = close.rolling(20).std()
     bb_upper = sma20 + 2 * std20
     bb_lower = sma20 - 2 * std20
 
@@ -123,25 +123,25 @@ def get_market_snapshot(symbol: str, timeframe: str = "15m") -> dict:
         })
 
     return {
-        "symbol":        symbol,
-        "ticker":        ticker,
-        "timeframe":     timeframe,
-        "current_price": round(last_close, 2),
-        "current_high":  round(last_high, 2),
-        "current_low":   round(last_low, 2),
-        "rsi_14":        round(float(rsi.iloc[-1]), 2),
-        "ema_20":        round(float(ema20.iloc[-1]), 2),
-        "ema_50":        round(float(ema50.iloc[-1]), 2),
-        "ema_200":       round(float(ema200.iloc[-1]), 2),
-        "macd_line":     round(float(macd_line.iloc[-1]), 4),
-        "macd_signal":   round(float(signal_line.iloc[-1]), 4),
-        "macd_histogram":round(float(histogram.iloc[-1]), 4),
-        "atr_14":        round(float(atr.iloc[-1]), 4),
-        "bb_upper":      round(float(bb_upper.iloc[-1]), 2),
-        "bb_lower":      round(float(bb_lower.iloc[-1]), 2),
-        "volume_last":   last_volume,
-        "volume_avg_20": avg_volume,
-        "resistance":    resistance,
-        "support":       support,
+        "symbol":         symbol,
+        "ticker":         ticker,
+        "timeframe":      timeframe,
+        "current_price":  round(last_close, 2),
+        "current_high":   round(last_high, 2),
+        "current_low":    round(last_low, 2),
+        "rsi_14":         round(float(rsi.iloc[-1]), 2),
+        "ema_20":         round(float(ema20.iloc[-1]), 2),
+        "ema_50":         round(float(ema50.iloc[-1]), 2),
+        "ema_200":        round(float(ema200.iloc[-1]), 2),
+        "macd_line":      round(float(macd_line.iloc[-1]), 4),
+        "macd_signal":    round(float(signal_line.iloc[-1]), 4),
+        "macd_histogram": round(float(histogram.iloc[-1]), 4),
+        "atr_14":         round(float(atr.iloc[-1]), 4),
+        "bb_upper":       round(float(bb_upper.iloc[-1]), 2),
+        "bb_lower":       round(float(bb_lower.iloc[-1]), 2),
+        "volume_last":    last_volume,
+        "volume_avg_20":  avg_volume,
+        "resistance":     resistance,
+        "support":        support,
         "candles_last_5": candles,
     }
