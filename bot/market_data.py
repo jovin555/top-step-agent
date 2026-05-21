@@ -58,6 +58,19 @@ def _atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) ->
     return tr.ewm(com=period - 1, adjust=True).mean()
 
 
+def get_htf_ema200(symbol: str) -> tuple[float, float]:
+    """Fetch 1H chart and return (current_price, ema200) for higher-timeframe trend filtering."""
+    ticker = SYMBOL_MAP.get(symbol.upper(), symbol)
+    df = yf.download(ticker, interval="60m", period="60d", progress=False, auto_adjust=True)
+    if df.empty or len(df) < 50:
+        raise ValueError(f"Not enough 1H data for {symbol}")
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    close = df["Close"].squeeze().dropna()
+    ema200 = _ema(close, 200)
+    return float(close.iloc[-1]), float(ema200.iloc[-1])
+
+
 def get_market_snapshot(symbol: str, timeframe: str = "15m") -> dict:
     ticker = SYMBOL_MAP.get(symbol.upper(), symbol)
     interval, period = INTERVAL_PERIOD_MAP.get(timeframe, ("15m", "5d"))
